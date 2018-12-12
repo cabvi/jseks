@@ -1,0 +1,2747 @@
+/**********************************************************************************
+ **********************************************************************************/
+
+$.fn.closestToOffset = function(offset) {
+    var el = null, elOffset, x = offset.left, y = offset.top, distance, dx, dy, minDistance;
+    this.each(function() {
+        elOffset = $(this).offset();
+
+        if (
+        (x >= elOffset.left)  && (x <= elOffset.right) &&
+        (y >= elOffset.top)   && (y <= elOffset.bottom)
+        ) {
+            el = $(this);
+            return false;
+        }
+
+        var offsets = [[elOffset.left, elOffset.top], [elOffset.right, elOffset.top], [elOffset.left, elOffset.bottom], [elOffset.right, elOffset.bottom]];
+        for (off in offsets) {
+            dx = offsets[off][0] - x;
+            dy = offsets[off][1] - y;
+            distance = Math.sqrt((dx*dx) + (dy*dy));
+            if (minDistance === undefined || distance < minDistance) {
+                minDistance = distance;
+                el = $(this);
+            }
+        }
+    });
+    return el;
+}
+
+$.fn.extend({
+    animateCss: function (animationName) {
+        var animationEnd = 'webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend';
+        this.addClass('animated ' + animationName).one(animationEnd, function() {
+            $(this).removeClass('animated ' + animationName);
+        });
+    }
+});
+
+Array.prototype.joinAnd=function(operator){
+    operator = (operator) ? ' ' + operator + ' ' : ' og '
+    var A=this;
+    var l=A.length;
+    var end=A.pop();
+    return (l>1) ? A.join(', ') + operator + end : end;
+}
+
+
+/**********************************************************************************
+ **********************************  Application **********************************
+ **********************************************************************************/
+
+var APP = {
+
+    token: undefined,
+    url: undefined,
+
+    init: function() {
+
+        this.token = $('input[name="token"]');
+        
+        // get url variables
+        var url = window.location.pathname.split('/');
+        this.url = url;
+        switch (url[1]) 
+        {
+            case 'utleie':
+                this.utleie(url);
+                break;
+            case 'bolig':
+            case 'rental':
+                this.bolig(url);
+                break;
+            case 'kontakt':
+                this.kontakt(url);
+                break;
+            case 'presse':
+                this.presse(url);
+                break;
+            case 'newsletter-unsubscribe':
+                this.newsletterUnsubscribe();
+                break;
+        }
+
+        // set globals
+        $('#footerEmail').click(function(event) {
+            APP.contactForm();
+        });
+
+        // this next will mesure action on media items: photos, documents etc.
+        $('.media-action').click(function(event){
+            mediaId = $(this).attr('data-id');
+            action  = $(this).attr('data-action');
+            APP.mediaAction(mediaId, action);
+        });
+        $('#media-request').click(function(event){
+            APP.mediaForm(mediaId, action);
+        });
+
+        // this next will check if the user checked on order policy of bestill befaring 
+        $(document).on('click', 'input[name="accept__policy"]', function(){
+            $('button').attr("disabled", true);
+            var $orderpolicy = $('input[name="accept__policy"]').is(':checked');
+            var $target      = $(this).attr("data-target");
+            if($orderpolicy){
+                $('#'+$target).removeAttr("disabled");
+                }else{   
+                $('#'+$target).attr("disabled", true);
+            }
+        });
+        // this next will show the policy for accepting a form
+        $(document).on('click', '#read-policy', function(){
+            $body  = '<div style="padding:20px;margin-top:60px;">';
+            $url   = $(this).attr("data-url");
+            $.get('/api/getpolicy/'+$url, function(data, status){ // make a function to get the content of the vilkÃ¥rene
+                $body = $body+data.body;
+                $body = $body+'</div>';
+                APP.Modal.init(data.title, $body);
+            });
+        });
+
+        // this next is to accept policy from email warning
+        $(document).on('click', '.agreement', function(){
+            var result = $(this).attr("data-value");
+            var encvalue = $('input[name="enc"]').val();
+            var target = $('input[name="target"]').val();
+            console.log('what: '+result+' to: '+encvalue+' target: '+target);
+            $.ajax({
+                url: '/api/xyz',
+                type: 'POST',
+                dataType: 'json',
+                data: {target: target, encvalue: encvalue, result: result},
+                success: function(data) {
+                    console.log('success');
+                    APP.Dialog.alert('Samtykke', data.message);
+                },
+                error: function(xhr) {
+                    console.error(xhr);
+                }
+            })
+            
+        });
+
+        // this next to send a request to be deleted from database
+        $(document).on('click', '#gdprdeleteme', function(){
+            var token = $('input[name="token"]').val();
+            var name  = $('input[name="gdpr_name"]').val();
+            var phone = $('input[name="gdpr_phone"]').val();
+            var email = $('input[name="gdpr_email"]').val();
+            $.ajax({
+                url: '/api/zyx',
+                type: 'POST',
+                dataType: 'json',
+                data: {name: name, phone: phone, email: email, token: token},
+                success: function(data) {
+                    console.log('success');
+                    APP.Dialog.alert('Slett meg', data.message);
+                },
+                error: function(xhr) {
+                    console.error(xhr);
+                }
+            })
+        });
+
+        ///////////////
+        // this next for accordion element
+
+        $(document).on('click', '.listaccordion', function(){
+            $(this).find('span').toggleClass('active');
+        });
+
+        ///////////////
+
+        autosize($('textarea'));
+
+        this.MobileHeader.init();
+        this.RentalFavorite.init();
+        this.links();
+        this.ion();
+        this.formAni();
+        this.formBefaring();
+        this.pageMenuPos();
+
+        APP.csSelect.placeholders();
+        $(document).on('click', '.cs-select', function(event) {
+            APP.csSelect.init($(this));
+        });
+
+        $('.front-main .arrow').click(function(event) {
+            APP.frontScrollNav();
+        });
+
+        if($('.front-main .arrow')[0]) {
+            var ival = setInterval(function() {
+                $('.front-main .arrow').animateCss('bounce');
+            },3500);
+        }
+
+        if($('.front-main h1[data-animate="true"]')[0]) {
+            $('.front-main h1 ').animateCss('pulse');
+        }
+
+        $('.button[data-button="share"]').click(function(event) {
+            APP.Share.modal("Del siden");
+        });
+
+        $(window).on('scroll', function(event) {
+            if($(this).scrollTop() > 0) {
+                $('.front-main .arrow').addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+                    $(this).hide().removeClass('animated zoomOut');
+                });
+            } 
+        });
+
+        // Submit response form
+        $('form').on('submit', function(evt) {
+            evt.preventDefault();
+            //APP.formSubmit($(this));
+        });
+
+        // disable enter key, and remove error-classes
+        $(document).on('keyup', 'input, textarea', function(event) {
+            if(event.keyCode == 13 && event.target.type == "text") {
+                event.preventDefault();
+            }
+            if ($(this).val().length > 0 && $(this).parents('.grid-col') && $(this).parents('.grid-col').hasClass('error')) {
+                $(this).parents('.grid-col').removeClass('error');
+                $(this).parents('.grid-col').attr("data-tag","");
+            }
+            else
+            if ($(this).val().length > 0 && $(this).parents('.item-input') && $(this).parents('.item-input').hasClass('error')) {
+                $(this).parents('.item-input').removeClass('error');
+                $(this).parents('.item-input').attr("data-tag","");
+            }
+            
+        });
+        
+        $('#cookiesAccepted').click(function(event) {
+            $.ajax({
+                url: '/api/cookie',
+                type: 'post',
+                dataType: 'json',
+                data: {token: APP.token.val()},
+                success: function(data) {
+                    APP.token.val(data.token);
+                    $('#cookieAlert').addClass('animated slideOutDown').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+                        $('#cookieAlert').remove();
+                    });
+                },
+                error: function(xhr) {
+                    console.error(xhr);
+                }
+            });
+        });
+    },
+    msie: function() {
+
+        var ua = window.navigator.userAgent;
+        var msie = ua.indexOf("MSIE ");
+        var ret = 0;
+
+        if (msie > 0 || !!navigator.userAgent.match(/Trident.*rv\:11\./))
+        {
+            ret = parseInt(ua.substring(msie + 5, ua.indexOf(".", msie)));
+        }
+        return ret;
+    },
+    frontScrollNav: function(target) {
+        var target = (target) ? $('[data-anchor="' + target + '"]') : $('.guide:first');
+        if(target[0]) {
+            $('body,html').animate({scrollTop : target.offset().top},400);
+        } else {
+            console.error('could not find target! (frontScrollNav)');
+        }
+    },
+    links: function() {
+        $(document).on('click', 'a', function(event) {
+            var link = $(this).attr('href');
+            if (link != undefined && link.indexOf('#') > -1) {
+                event.preventDefault();
+                var target = $('#' + link.replace("#", ""));
+                
+                if(target[0]) {
+                    console.log(target.offset().top);
+                    $('body,html').animate({scrollTop : target.offset().top},400);    
+                }
+            }
+            if($(this).data('target') == "sharewindow") {
+                event.preventDefault();
+                APP.Share.sharewindow($(this));
+            }
+            if($(this).data('target') == "emailform") {
+                event.preventDefault();
+                APP.Share.emailform($(this));
+            }
+        });
+    },
+    aria: function(obj) 
+    {
+        if(obj.attr('role')=="checkbox") {
+            if($(obj).attr('aria-checked') == 'false') {
+                $(obj).attr('aria-checked', true);
+            }
+            else {
+                $(obj).attr('aria-checked', false);
+            }
+        }
+        if(obj.attr('role')=="link") {
+            $('a[role="link"]').attr('aria-checked', false);
+            $(obj).attr('aria-checked', true);
+        }
+    },
+    ion: function() {
+        $('a:not(.ion-ignore)').on('mouseover', function() {
+            if(!$(this).hasClass('active') && $(this).children('i')[0]) {
+                var cls = $(this).children('i').attr('class'),
+                    hov = cls.replace('-outline','');
+                $(this).children('i').removeClass(cls).addClass(hov);
+            }
+        }).on('mouseout', function() {
+            if(!$(this).hasClass('active') && $(this).children('i')[0]) {
+                var cls = $(this).children('i').attr('class'),
+                    out = (cls.indexOf('outline') !== -1) ? cls : cls + '-outline';
+                $(this).children('i').removeClass(cls).addClass(out);
+            }
+        });
+    },
+    isEmail: function(email) {
+        var regex = /^([a-zA-Z0-9_.+-])+\@(([a-zA-Z0-9-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+        return regex.test(email);
+    },
+    pageMenuPos: function() {
+        if( $('.page-menu a.active')[0]) {
+            $('.page-menu .horizontal-scroll').scrollLeft( 
+                ($('.page-menu .horizontal-scroll a.active').offset().left) // get the left position of active item
+              - ($(window).width() / 2)                  // substract center position of screen width
+              + (
+                ($('.page-menu .horizontal-scroll a.active').width() / 2)   // add center position of active item
+                 - 10                                    // compensate for padding
+                ) 
+            );
+        }
+    },
+
+    // MEDIA ACTION
+    mediaAction: function(mediaId, action){
+        $.ajax({
+            url: '/api/yxz',
+            type: 'POST',
+            dataType: 'html',
+            data: {id: mediaId, action: action},
+        })
+        .done(function() {
+            console.log("success");
+        })
+        .fail(function() {
+            console.log("error");
+        })
+        .always(function() {
+            console.log("complete");
+        });
+        
+    },
+
+    // MEDIA Request
+
+    mediaForm: function(id, action) {
+        var body        = $('<div />').addClass('contact-form');
+        var buttonId    = new Date().getTime();
+        var modallinks  = [$('<a />').attr('id', 'sendContactForm_' + buttonId).text("Send")];
+        APP.Modal.init('Media forespÃ¸rsel', body, buttonId, modallinks, 1);
+                
+        },
+
+
+    // CONTACT FORM
+
+    contactForm: function(userId) {
+        var id = (userId !== undefined) ? userId : "";
+        console.log(id);
+        $.get('/api/v1/get/epost', {token: APP.token.val(), id: id}, function(data) {
+            var subject = (APP.url[1] != undefined && APP.url[1] == "bolig" && APP.url[2] != undefined)
+                        ? $('head meta[property="og:title"]').attr('content').replace("Utleiemegleren ", "")
+                        : 'Melding fra utleiemegleren.no ';
+            window.location.href = "mailto:" + data.email + '?subject=' + subject;
+            APP.token.val(data.token);
+        });
+        /*
+        var container;
+        var modaltitle = "Send e-post";
+        //$('<a />').attr('id', 'addFileToContactForm_' + userId).html($('<i />').addClass("ion-android-attach")), 
+        var buttonId   = new Date().getTime();
+        var modallinks = [$('<a />').attr('id', 'sendContactForm_' + buttonId).text("Send")];
+        var currentUrl = window.location.pathname;
+        var body = $('<div />').addClass('contact-form');
+        $.get('/share/contact/'+userId, function(data) 
+        {
+            body.append(data.html);
+            modaltitle = data.title;
+            container = APP.Modal.init(modaltitle, body, modallinks);
+
+            $(document).on('click', '#sendContactForm_' + buttonId, function(event) {
+                event.preventDefault();
+
+                var button = $(this);
+                button.prop('disabled', true); 
+                APP.Hud.show('Sender', 'load',true); // addClass('button-progress');
+                
+                var form    = $('.mobile-modal-overlay[data-title="' + modaltitle + '"]'),
+                    name    = form.find('.contact-form input[name="contact_name"]').val(),
+                    email   = form.find('input[name="contact_email"]').val(),
+                    title   = $('head meta[property="og:title"]').attr('content'),
+                    msg     = form.find('textarea[name="contact_message"]').val();
+
+                $.ajax({
+                    url: '/api/v1/put/zyx/' + userId,
+                    type: 'post',
+                    dataType: 'json',
+                    data: {
+                        contact_name: name, 
+                        contact_email: email, 
+                        contact_message: msg, 
+                        currentUrl: currentUrl, 
+                        title:title,
+                        token:APP.token.val()
+                    },
+                    success: function(output) {
+                        APP.token.val(output.token);
+                        APP.Dialog.confirm(output.header, output.message, [{label:"OK", action:true}])
+                         .then(function(answer) { 
+                            if(answer) { 
+                                if(container) 
+                                {
+                                    APP.Modal.destroy(container);
+                                }
+                                $(document).off('click', '#sendContactForm_' + buttonId);
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        console.log(xhr);
+                        if(xhr.responseJSON.errors != undefined) {
+                        $.each(xhr.responseJSON.errors, function(index, err) {
+                            var item = $('[name="' + err.name + '"]', document).parents('.item-input');
+                            APP.formError(item, err, 'flash');
+                        });
+                        }
+                        if(xhr.responseJSON.token != undefined) {
+                            APP.token.val(xhr.responseJSON.token);
+                        }
+                    },
+                    complete: function() {
+                        APP.Hud.hide();
+                        button.prop('disabled', false); 
+                    }
+                });
+                
+            });
+        }, 'json');
+        */
+    },
+
+    formBefaring: function() {
+        $('.grid-col input[name="order_postcode"]').keydown(function(event) {
+            if(event.keyCode == 32){
+                return false;
+            }
+        }).keyup(function(event) {
+            setPostal();
+        });
+        function setPostal() {
+            var code = $('.grid-col input[name="order_postcode"]');
+            var place = $('.grid-col input[name="order_postalplace"]');
+            if(code.val().length == 4) {
+                $.ajax({
+                    url: '/api/v1/get/xxy',
+                    dataType: 'json',
+                    data: {postcode: code.val()},
+                    success: function(data) {
+                        place.parents('.grid-col').removeClass('error').addClass('filled');
+                        setTimeout(function() {place.val(data.postalplace);},250);
+                    },
+                    error: function(xhr) {
+                        place.parents('.grid-col').addClass('error filled');
+                        setTimeout(function() {place.val(xhr.responseJSON.postalplace);},250);
+                    }
+                });
+            } else {
+                place.val('');
+                place.parents('.grid-col').removeClass('error filled');
+            }
+        }
+
+        $(document).on('click', '#sendSponsorEmail', function(event){
+            $emails = $('input[name="epost"]').val();
+            //alert($emails);
+            
+            var button = $(this);
+                //button.prop('disabled', true); 
+                APP.Hud.show('Sender', 'load',true); // addClass('button-progress');
+            var progress = 0;
+            
+
+            $.ajax({
+                xhr: function() {
+                    var xhr = $.ajaxSettings.xhr();
+                    xhr.upload.onprogress = function(e) {
+                        //console.log(Math.floor(e.loaded / e.total *100) + '%');
+                    };
+                    return xhr;
+                },
+                url: '/api/xxz',
+                type: 'post',
+                dataType: 'json',
+                data: {
+                    token: APP.token.val(),
+                    order_email: $('input[name="order_email"]').val(),
+                    order_name: $('input[name="order_name"]').val(),
+                    order_phone: $('input[name="order_phone"]').val(),
+                    order_toemails: $('input[name="epost"]').val(),
+                    order_campaignid: $('input[name="campaignid"]').val(),
+                },
+                error: function(xhr) {
+                    if(xhr.responseJSON.errors != undefined) {
+                        $.each(xhr.responseJSON.errors, function(index, err) {
+                            var item = $('[name="' + err.name + '"]', document).parents('.grid-col');
+                            APP.formError(item, err);
+                        });
+                    }
+                }
+            })
+            .done(function(data) {
+                console.log("success");
+                console.log(APP.token.val(data.token));
+                APP.token.val(data.token);
+                    $('#order_results_sponsor').html(data.html);
+
+                    $('#contactsponsor_form').addClass('animated zoomOutRight').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                        $('#contactsponsor_form').hide().removeClass('animated zoomOutRight');
+                        $('#order_results_sponsor').show().addClass('animated fadeIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                            $('#order_results_sponsor').removeClass('animated fadeIn');
+                        });
+                    });
+
+                    console.log(data);
+                    if(data.header == "OK") {
+                        console.log("epost ble sendt");
+                        } else {
+                        console.log("ingen epost ble sendt");
+                        }
+            })
+            .fail(function(xhr) {
+                console.log("error");
+                console.error(xhr);
+            })
+            .always(function(xhr) {
+                console.log("complete");
+                APP.Hud.hide();
+            })
+        }); // end of sponsor
+
+
+        $('button#bestillBefaring').click(function(event) {
+            var button = $(this);
+                button.prop('disabled', true); 
+                APP.Hud.show('Sender', 'load',true); // addClass('button-progress');
+            var progress = 0;
+
+            var newslettercheck = 'off';
+            if($('input[name="newsletter-ok"]').is(':checked')){
+                newslettercheck = 'on';
+                }
+
+            $.ajax({
+                xhr: function() {
+                    var xhr = $.ajaxSettings.xhr();
+                    xhr.upload.onprogress = function(e) {
+                        //console.log(Math.floor(e.loaded / e.total *100) + '%');
+                    };
+                    return xhr;
+                },
+                url: '/api/v1/put/zzx',
+                type: 'post',
+                dataType: 'json',
+                data: {
+                    token: APP.token.val(),
+                    order_contact: (($('input[name="order_contact"]')[0]) ? 1 : 0),
+                    order_email: $('input[name="order_email"]').val(),
+                    order_name: $('input[name="order_name"]').val(),
+                    order_phone: $('input[name="order_phone"]').val(),
+                    order_address: $('input[name="order_address"]').val(),
+                    order_newsletter: newslettercheck,
+                    order_path: window.location.pathname + window.location.search
+                },
+                success: function(data) {
+                    APP.token.val(data.token);
+                    $('#order_results').html(data.html);
+                    $('#order_form, #contactme_form').addClass('animated zoomOutRight').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                        $('#order_form, #contactme_form').hide().removeClass('animated zoomOutRight');
+                        $('#order_results').show().addClass('animated fadeIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                            $('#order_results').removeClass('animated fadeIn');
+                        });
+                    });
+                    if(data.header == "OK") {
+                        // GA: Google Analytics
+                        if (typeof(ga) == 'function') {
+                            ga('send', 'event', 'Overall use', 'Complete Bestill Befaring', 'Overall event - Completing â€œBestill befaringâ€');
+                        }
+                        // FBQ: Facebook
+                        if(typeof(fbq) == 'function') {
+                            fbq('track', 'CompleteRegistration');
+                        } 
+                    }
+                },
+                error: function(xhr) {
+                    if(xhr.responseJSON.errors != undefined) {
+                        $.each(xhr.responseJSON.errors, function(index, err) {
+                            var item = $('[name="' + err.name + '"]', document).parents('.grid-col');
+                            APP.formError(item, err);
+                        });
+                    }
+                    if(xhr.responseJSON.token != undefined) {
+                        APP.token.val(xhr.responseJSON.token);
+                    }
+                },
+                complete: function() {
+                    APP.Hud.hide();
+                    button.prop('disabled', false);
+                    $('body').animate({scrollTop : $('#order_results').parents('.guide').offset().top},400);    
+                }
+            });
+        });
+    },
+    formAni: function() {
+
+        $(document).on('focusin', '.form-grid .input__field', function(event) {
+            var input = $(this);
+            if(input.val().length==0) {
+                input.parents('.grid-col').addClass('filled');
+            }
+        }).on('focusout', '.form-grid .input__field', function(event) {
+            var input = $(this);
+            if(input.val().length==0) {
+                input.parents('.grid-col').removeClass('filled');
+                if(input.is('textarea')) {
+                    input.css('height',45);
+                }
+            }
+        });
+    },
+    formError: function(item, err, ani) {
+        if(typeof item == "object") 
+        {
+            ani = (ani) ? ani : 'pulse';
+            item.addClass('error').attr('data-tag', err.message);
+            item.addClass('animated ' + ani).one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                item.removeClass('animated ' + ani);
+            });
+        }
+    },
+
+    
+
+    
+
+    utleie: function(url) {
+        
+        if(url[2] == "alt" && url[3] == 1) {
+        
+            APP.StickyDiv.init();         
+            $('.list[data-list="toc"] a').click(function(event) {
+                $('.list[data-list="toc"] a').removeClass('active');
+                $(this).addClass('active');
+                $anchor = $(this).data('link');
+                $target = $('h2[data-anchor="' + $anchor + '"]');
+                $loc = parseInt($target.offset().top - 40);
+                $('body').animate({scrollTop : $loc},400);
+            });
+        }
+        
+    },
+
+    bolig: function(url) {
+        //APP.StickyDiv.init();
+        var ignoreUrl = ["favoritter", "avmelding"];
+        if (this.url[2] != undefined && (this.url[2].indexOf('-') > -1 || $.isNumeric(this.url[2])) && ignoreUrl.indexOf(this.url[2]) <= 0)
+        {
+            APP.StickyDiv.init();
+
+            // send prospekt pÃ¥ epost
+            $(document).on('click', '#prospekt', function(event){
+                event.preventDefault();
+                $.get('/api/v1/get/prospet', function(data) {
+                    var body = $('<div />');
+                        body.addClass('email-form');
+                        body.append(data);
+                    var buttonId= new Date().getTime();
+                    var button   = [$('<a />').attr('id', 'sendProspect_'+buttonId).text("Send")];
+                    var container = APP.Modal.init('Boligprospekt', body, button, undefined, 1);
+
+                    $(document).on('click', '#sendProspect_'+buttonId, function(event) {
+                        event.preventDefault();
+                        var email = body.find('input[name="prospect_email"]').val();
+                        if(APP.isEmail(email)) {
+                            APP.Hud.show('Sender', 'load', true);
+                            $.ajax({
+                                url: '/api/v1/put/yyx',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {obj: APP.url[2], prospect_email: email, token: APP.token.val()},
+                                    success: function(output) {
+                                        APP.Dialog.confirm(output.header, output.message, [{label:"OK", action:true}])
+                                         .then(function(answer) { 
+                                            if(container !== undefined && answer) {
+                                                APP.Modal.destroy(container);
+                                                $(document).off('click', '#sendProspect_'+buttonId);
+                                            }
+                                        });
+                                    },
+                                    error: function(xhr) {
+                                        if(xhr.responseJSON.errors != undefined) {
+                                            $.each(xhr.responseJSON.errors, function(index, err) {
+                                                var item = $('input[name="' + err.name + '"]', document).parents('.grid-col');
+                                                APP.formError(item, err);
+                                            });
+                                        }
+                                        
+                                    },
+                                    complete: function(xhr) {
+                                        APP.Hud.hide();
+                                        if(xhr.responseJSON.token != undefined) {
+                                            APP.token.val(xhr.responseJSON.token);
+                                        }
+                                    }
+                            });
+                        }
+                        else {
+                            APP.Dialog.alert("Feil i skjema", "Du mÃ¥ fylle ut en gyldig e-postadresse.");
+                        }
+                    });
+                });
+            });
+
+            $('.map-static').click(function(event) {
+                APP.Maps.init($(this)); 
+            });
+
+            $('a[data-action^="map_"]').click(function(event) {
+                APP.Maps.init($('.map-static'), $(this).data("action").replace("map_","")); 
+            });
+
+            var boligSwiper = initSwiper('.swiper-container',1,3);
+
+            // open images in fullscreen
+            $('.swiper-slide .image-container').click(function(event) {
+                //collection.index(obj)
+                fullscreen($(this).parent('.swiper-slide').data('swiper-slide-index') + 1);
+            });
+            $('a[data-action="large-images"]').click(function(event) {
+                fullscreen();
+            });
+
+            function fullscreen(idx) {
+                var target = $('.swiper-container').clone();
+                    target.removeClass('fullwidth-gallery');
+                    var container = APP.Modal.init(target.data('title'), target);
+                    initSwiper(container.find('.swiper-container'), idx);
+            }
+
+            function initSwiper(target, idx, noSlides) {
+                var space = (noSlides) ? 3 : 0;
+                    idx = (idx!=undefined) ? (idx - 1) : 0;
+                return new Swiper(target,{
+                    mode:'horizontal',
+                    initialSlide: idx,
+                    loop: true,
+                    grabCursor: true,
+                    keyboardControl: true,
+                    calculateHeight:true,
+                    slidesPerView: noSlides,
+                    spaceBetween: space,
+                    pagination: $(target).find('.pagination')[0],
+                    createPagination: true,
+                    paginationClickable: true,
+                    nextButton: $(target).find('.swiper-button-next')[0],
+                    prevButton: $(target).find('.swiper-button-prev')[0]
+                });
+            }
+        }
+        else
+        if (this.url[2] == "avmelding")
+        {
+            $('button[data-action="unsubscribe"]').click(function(event) {
+                var button = $(this);
+                    button.prop('disabled', true); 
+                $.ajax({
+                    xhr: function() {
+                        var xhr = $.ajaxSettings.xhr();
+                        xhr.upload.onprogress = function(e) {
+                            console.log(Math.floor(e.loaded / e.total *100) + '%');
+                        };
+                        return xhr;
+                    },
+                    url: '/api/v1/put/zzy',
+                    type: 'post',
+                    dataType: 'json',
+                    data: {
+                        token: APP.token.val(),
+                        key: $('input[name="unsubscribe_key"]').val(),
+                        email: $('input[name="unsubscribe_email"]').val(),
+                        reason: $('input[name="unsubscribe_reason"]:checked').val()
+                    },
+                    success: function(data) {
+                        $('body').animate({scrollTop : 0},250);
+                        APP.token.val(data.token);
+                        $('#unsubscribe_results').html(data.html);
+                        $('#unsubscribe_form').addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                            $('#unsubscribe_form').hide().removeClass('animated zoomOut');
+                            $('#unsubscribe_results').show().addClass('animated fadeIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                                $('#unsubscribe_results').removeClass('animated fadeIn');
+                            });
+                        });
+                    },
+                    error: function(xhr) {
+                        if(xhr.responseJSON.errors != undefined) {
+                            $.each(xhr.responseJSON.errors, function(index, err) {
+                                var item = $('input[name="' + err.name + '"]', document).parents('.grid-col');
+                                APP.formError(item, err);
+                            });
+                        }
+                        if(xhr.responseJSON.token != undefined) {
+                            APP.token.val(xhr.responseJSON.token);
+                        }
+                    },
+                    complete: function() {
+                        APP.Hud.hide();
+                        button.prop('disabled', false); 
+                    }
+                });
+                
+            });
+        }
+        else
+        if (this.url[2] == "favoritter")
+        {
+            APP.StickyDiv.reverse();
+
+            Sortable.create($('.list[data-list="favorites"]')[0], {
+              animation: 250, 
+              sort: true,
+              chosenClass: "item-sortable-chosen",
+              ghostClass: "item-sortable-ghost",
+              draggable: '.rent-item',
+              onUpdate: function (evt){
+                var input = $('.list[data-list="favorites"] .rent-item input').serialize() + '&token=' + APP.token.val();   
+                $.ajax({
+                    url: '/api/v1/update/xxy',
+                    type: 'post',
+                    data: input,
+                    success: function(data) {
+                        APP.token.val(data.token);
+                    },
+                    error: function(xhr) {
+                        console.error(xhr);
+                    }
+                });
+              }
+            });
+        }
+        else
+        if (this.url[2] == "interessentskjema")
+        {
+
+        }
+        else
+        if (this.url[2] == "fjernet")
+        {
+
+        }
+        else 
+        {
+            APP.StickyDiv.reverse();
+
+            var list = $('.list[data-list="rentalsearchparams"]');
+            var query;
+            var keywords = "";
+            var signup = false;
+
+            aniCount();
+            setUrl();
+            filters();
+            //toggleSubscription();
+
+            function locations(callback) {
+                var locs = "";
+                var lcounties = [];
+                var parents = list.find('.list-item[data-group="county"] input:checkbox:checked');
+                if (parents != undefined) {
+                    parents.each(function(index, el) {
+                        var label = $(el).data('label');
+                        var city = [];
+                        $.each(list.find('.list-item[data-group="city"] input[data-parent="' + label + '"]:checkbox:checked'), function(index, val) {
+                            locs += $(val).data('parent') +','+ $(val).val()+';';
+                            lcounties.push($(val).data('parent'));
+                        });
+                        if(lcounties.indexOf(label) < 0) {
+                            locs += label + ';';
+                        }
+                    });
+                }
+                locs = locs.substring(0,(locs.length-1));
+                return callback(locs);
+            }
+
+            function getParam(key) {
+                var data = list.find('.list-item[data-group="' + key + '"] input:checkbox:checked');
+                return data;
+            }
+
+            function getUrlVars(callback) {
+                var type = [];
+                $.each(getParam('propertytype'), function(index, el) {
+                     type.push($(el).data('label'));
+                });
+                var furniture = [];
+                $.each(getParam('furniture'), function(index, el) {
+                     furniture.push($(el).data('label'));
+                });
+                var available = [];
+                $.each(getParam('availability'), function(index, el) {
+                     available.push($(el).data('label'));
+                });
+                var rows = parseInt($('.list[data-list="rentalsearchresults"] .rent-item').length);
+                    rows = (rows < 20) ? 20 : rows;
+
+                var sorting = list.find('.item-radio[data-group="sorting"] input:radio:checked').val();
+
+                    keywords = $('input[name="rentalkeywords"]').val().substring(0,20);
+
+                    signup = $('input[name="signup"]').is(':checked');
+
+                return callback({'location':[locations(function(data){return data;})], 'type':type, 'furniture':furniture, 'available':available, 'keywords':keywords, 'rows':rows, 'sorting':sorting, 'signup':signup});
+            }
+
+            function setUrl() {
+                getUrlVars(function(data) {                   
+                    query = ''
+                          + '?location=' + locations(function(data){return data;})
+                          + '&type=' + ((data.type != undefined) ? data.type.join() : '')
+                          + '&furniture=' + ((data.furniture != undefined) ? data.furniture.join() : '')
+                          + '&availability=' + ((data.available != undefined) ? data.available.join() : '')
+                          + '&keywords=' + keywords
+                          + '&sorting=' + data.sorting
+                          + '&signup=' + data.signup
+                          ;
+                    window.history.replaceState(null, document.title, window.location.origin + '/bolig/' + query);
+                    toggleSubscription(data.signup);
+                });
+            }
+
+            function updateView() {
+                setUrl();
+                results();
+            }
+
+
+            function openFavs(target) {
+                
+                if($(window).scrollTop()<65) {
+                    $('body').animate({scrollTop : 65},250);
+                    setTimeout(function() {
+                        $('#toggleFavIcon').addClass('active');
+                        $('#rentalfavorites').addClass('open'); //.
+                    },260);
+                } else {
+                    $('#toggleFavIcon').addClass('active');
+                    $('#rentalfavorites').addClass('open'); //.
+                }
+            }
+            function closeFavs() {
+                $('#rentalfavorites').removeClass('open');
+                $('#toggleFavIcon').removeClass('active');
+            }
+
+
+            // listeners
+            $(document).on('change', '.list[data-list="rentalsearchparams"] input:checkbox', function(event) {
+                updateView();
+                if($(this).attr('name') == "county") 
+                {
+                    var item = $(this);
+                    var sub  = $('div[data-parent="' + item.data('label') + '"]')
+                    if(item.prop('checked')) {
+                        sub.show();
+                    } else {
+                        sub.hide();
+                        list.find('.list-item[data-group="city"] input[data-parent="' + item.data('label') + '"]:checkbox:checked').prop("checked", false);
+                    }
+                }
+                
+            });
+            // changed keyword
+            $('input[name="rentalkeywords"]').keyup(function(event) {
+                var col = $(this).parents('.grid-col');
+                if (event.keyCode == 13) {
+                    updateView();
+                    col.attr('data-tag', '');
+                } 
+                
+                if ($(this).val().length>0 && event.keyCode != 13) {
+                    col.attr('data-tag', 'Trykk enter for Ã¥ starte sÃ¸k');
+                }
+                else {
+                    updateView();
+                    col.attr('data-tag', '');
+                }
+            });
+            // changed params
+            $('.list[data-list="rentalsearchparams"] input:radio').change(function(event) {
+                updateView();
+            });
+
+            // more results
+            $('#moreresults').click(function(event) {
+                results(true);
+            });
+
+            // toggle favorites menu
+            $(document).on('click', '#toggleFavIcon', function(event) {
+                if($('#rentalfavorites').hasClass('open')) {
+                    closeFavs();
+                }
+                else {
+                    openFavs();
+                    var signup = $('input[name="signup"]');
+                    if(signup.is(':checked')) {
+                        signup.trigger('click');
+                        setUrl();
+                    }
+                }
+            });
+
+            // toggle search options (mobile)
+            $(document).on('click', 'button[data-action="toggleRentalSearch"]', function(event) {
+                if(!$('.rentalsearch').hasClass('open')) {
+                    $('.rentalsearch').addClass('open');
+                } else {
+                    $('.rentalsearch').removeClass('open');
+                }
+            });
+
+            // toggle subscribe box
+            $(document).on('click', 'a[data-button="openSubscribe"], a[data-button="closeSubscribe"], #saveSearchIcon', function(event) {
+                event.preventDefault();
+                var signup = $('input[name="signup"]');
+                signup.trigger('click');
+                setUrl();
+                closeFavs();
+            });
+
+            // highlight search-box
+            $('#subscribeText').click(function(event) {
+                if( $('#rentalsearchcontainer').is(':visible')) {
+                    $('#rentalsearchcontainer').addClass('animated pulse highlight').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                        $(e.target).removeClass('animated pulse highlight');
+                    });
+                }
+                $('#changeRentalSearchButton').addClass('animated pulse highlight').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                    $(e.target).removeClass('animated pulse highlight');
+                });
+
+            });
+
+
+            // get / more results
+            function results(more) {
+                var rows = parseInt($('.list[data-list="rentalsearchresults"] .rent-item').length);
+                var request = (more) ? 'more' : 'results';
+                var loader = setTimeout(function() {APP.Hud.show('','load',true);},300);
+                getUrlVars(function(params) {
+                    $.ajax({
+                        xhr: function() {
+                            var xhr = $.ajaxSettings.xhr();
+                            xhr.upload.onprogress = function(e) {
+                                console.log(e);
+                                console.log(Math.floor(e.loaded / e.total *100) + '%');
+                            };
+                            return xhr;
+                        },
+                        url: '/rental/get/' + request,
+                        type: 'get',
+                        dataType: 'json',
+                        data: {
+                            params: params,
+                            keywords: keywords,
+                            rows: rows
+                        },
+                        success: function(data) {
+                            if(!more) {
+                                $('.rentalsearchlabel').text(((data.count == 1) ? 'bolig' : 'boliger'));
+                                var initCount = parseInt($('#rentalsearchhits').text());
+                                $('.rentalsearchhits').text(data.count);
+                                aniCount(initCount);
+                                $('.list[data-list="rentalsearchresults"]').html(data.results).promise().done(function(e){
+                                    moreButton(data.count);
+                                });
+                                filters(data);
+                            } 
+                            else 
+                            {
+                                $('.list[data-list="rentalsearchresults"]').append(data.results).promise().done(function(e){
+                                    moreButton(data.count);
+                                    setUrl();
+                                });
+                            }
+                            
+                        },
+                        error: function(xhr) {
+                            console.error(xhr.responseText);
+                        },
+                        complete: function(xhr) {
+                            clearTimeout(loader);
+                            APP.Hud.hide();
+                        }
+                    });
+                });
+            }
+
+            function getFilterData(data, callback) {
+                if(data!=undefined) {
+                    return callback(data);
+                }
+                else {
+                    getUrlVars(function(params) {
+                        $.get('/bolig/get/filters', {params: params, keywords: keywords}, function(results) {
+                            if(results.filters != undefined) {
+                                return callback(results);
+                            } else {
+                              return callback();
+                            }
+                        },'json');
+                    });
+                }
+            }
+
+            // update filters with hits
+            function filters(filterdata) {
+                getFilterData(filterdata, function(data){
+                    var updatedParams = [];
+                    if(typeof data == 'object') 
+                    {
+                       $.each(data.filters, function(name, arr) {
+                            if(typeof arr == 'object') 
+                            {
+                                $.each(arr, function(idx, item) {
+                                    $('.list-item[data-item="' + item.label + '"]').removeClass('item-disabled');
+                                    $('.list-item[data-item="' + item.label + '"] span[data-role="hits"]').text('(' + item.hits + ')');
+                                    updatedParams.push(item.label);
+                                });
+                            }
+                       });
+                    }
+                    $('.list[data-list="rentalsearchparams"] .list-item[data-update]').each(function(index, el) {
+                       if(updatedParams.indexOf($(this).data('item')) < 0) {
+                            $(this).addClass('item-disabled');
+                            $(this).find('span[data-role="hits"]').text('(0)')
+                       }
+                    });
+                    updateSubscription(data.week_count);
+                });
+            }
+
+            // show/hide moreButton
+            function moreButton(hits) {
+                var hits = (hits) ? hits : parseInt($('#rentalsearchhits').text());
+                var visible = parseInt($('.list[data-list="rentalsearchresults"] .rent-item').length);
+                if(hits > visible) {
+                    $('#moreresults').removeClass('hide');
+                } else {
+                    $('#moreresults').addClass('hide');
+                }
+            }
+
+            // animate search hits
+            function aniCount(hits) {
+                var initCount = (hits) ? hits : 0;
+                $('.rentalsearchhits').each(function (i, ev) {
+                    $(ev).prop('Counter',initCount).animate({
+                        Counter: $(this).text()
+                    }, {
+                        duration: 1000,
+                        easing: 'swing',
+                        step: function (now) {
+                            $(this).text(Math.ceil(now));
+                        }
+                    });
+                });
+            }
+
+            // animate subscription week hits
+            function aniCountWeek(hits) {
+                var initCount = (hits) ? hits : 0;
+                $('#subscribe [data-label="week_count"] strong').each(function () {
+                    $(this).prop('Counter',initCount).animate({
+                        Counter: $(this).text()
+                    }, {
+                        duration: 1000,
+                        easing: 'swing',
+                        step: function (now) {
+                            $(this).text(Math.ceil(now));
+                        }
+                    });
+                });
+            }
+
+
+            function subscriptionLocationText(array) {
+                if(array.length > 0) {
+                    var arr = [];
+                    for (var i = 0; i < array.length; i++) {
+                        var str = array[i].split(',');
+                        if(str[1] != undefined) {
+                            arr.push(str[1]);
+                        } else {
+                            arr.push(str[0]);
+                        }
+                    }
+                    return arr.joinAnd('eller');
+                }
+                return '';
+            }
+
+
+            // set parameters in subscribe box
+            function updateSubscription(count) {
+
+                getUrlVars(function(data) 
+                {
+                    $('#subscribe').find('span[data-label="propertytype"]').html(((data.type.length > 0) ? '<strong>' + data.type.joinAnd('eller') + '</strong>' : 'bolig'));
+                    $('#subscribe').find('span[data-label="county"]').html(((data.location != "") ? ", i " + '<strong>' + subscriptionLocationText(data.location.join(",").split(";")) + '</strong>' : ''));
+                    $('#subscribe').find('span[data-label="furniture"]').html(((data.furniture.length > 0) ? ", som er " + '<strong>' + data.furniture.joinAnd('eller') + '</strong>' : ''));
+                    $('#subscribe').find('span[data-label="availability"]').html(((data.available.length > 0) ? ", ledig fra " + '<strong>' + data.available.joinAnd('eller') + '</strong>' : ''));
+
+                    $('#subscribe').find('span[data-label="binding"]').text(((data.furniture.length > 0 && data.available.length > 0) ? ', og' : ''));
+                    $('#subscribe').find('span[data-label="keywords"]').html((($('input[name="rentalkeywords"]').val().length > 0) ? ' hvor "<strong>' + $('input[name="rentalkeywords"]').val() + '</strong>" er nevnt i annonseteksten' : ''));
+                
+                    var week_count = $('#subscribe [data-label="week_count"] strong');
+                    var initCount = week_count.text();
+                        week_count.text(count);
+                        aniCountWeek(initCount);
+                    var suggestion = (count > 30) 
+                                        ? 'PrÃ¸v med andre sÃ¸kevalg om du vil motta fÃ¦rre e-postvarsler.'//'Velg flere sÃ¸kevalg (som sted, boligtype, mÃ¸blert, ledig fra eller ord i annonsen) om du vil minske sannsynligheten for antall e-postvarsler.' 
+                                        : ((count < 5) ? 'PrÃ¸v med andre sÃ¸kevalg om du vil motta flere e-postvarsler.' : '');
+                    $('#subscribe [data-label="suggestion"]').text(suggestion);              
+                });                 
+            }
+
+            function toggleSubscription(isOn) {
+                if(isOn) 
+                {   
+                    if ($(window).scrollTop() > $('#results').offset().top - 25) {
+                        $('body').animate({scrollTop : 110},400);
+                    }
+                    else
+                    if ($(window).scrollTop() <110) {
+                        $('body').animate({scrollTop : 110},250);
+                    }
+                    openSubscribe();
+                }
+                else
+                {
+                    closeSubscribe();
+                }
+            }
+
+            function openSubscribe() {
+                $('a[data-button="openSubscribe"]').text($('a[data-button="openSubscribe"]').data('open'));
+                $('#results').addClass('hide');
+                $('#subscribe').removeClass('hide').addClass('open');
+                $('#saveSearchIcon i').attr('class', $('#saveSearchIcon i').attr('class').replace('-outline',''));
+                $('#saveSearchIcon').addClass('active');
+            }
+
+            function closeSubscribe() {
+                $('a[data-button="openSubscribe"]').text($('a[data-button="openSubscribe"]').data('default'));
+                $('#subscribe').removeClass('open').addClass('hide');
+                $('#results').removeClass('hide');
+                $('#saveSearchIcon').removeClass('active');
+                if($('#saveSearchIcon i').attr('class').indexOf('-outline') == -1) {
+                   $('#saveSearchIcon i').attr('class', $('#saveSearchIcon i').attr('class') + '-outline');
+                }
+            }
+
+
+
+            // save subscription
+            $('button[data-action="saveSubscription"]').click(function(event) {
+                var button = $(this);
+                    button.prop('disabled', true); 
+                APP.Hud.show('Lagrer', 'load',true); // addClass('button-progress');
+                var progress = 0;
+
+                getUrlVars(function(vars) 
+                {  
+                    var newslettercheck = 'off';
+                    if($('input[name="newsletter-ok"]').is(':checked')){
+                        newslettercheck = 'on';
+                        }
+                    $.ajax({
+                        xhr: function() {
+                            var xhr = $.ajaxSettings.xhr();
+                            xhr.upload.onprogress = function(e) {
+                                console.log(Math.floor(e.loaded / e.total *100) + '%');
+                            };
+                            return xhr;
+                        },
+                        url: '/api/v1/put/xxy',
+                        type: 'post',
+                        dataType: 'json',
+                        data: {
+                            token: APP.token.val(),
+                            key: $('input[name="key"]').val(),
+                            params: vars,
+                            keywords: $('input[name="rentalkeywords"]').val(),
+                            subscribe_id: $('input[name="subscribe_id"]').val(),
+                            subscribe_email: $('input[name="subscribe_email"]').val(),
+                            subscribe_newsletter: newslettercheck,
+                            subscribe_name: $('input[name="subscribe_name"]').val(),
+                            subscribe_phone: $('input[name="subscribe_phone"]').val()
+                        },
+                        success: function(data) {
+                            APP.token.val(data.token);
+                            $('#subscribe_results').html(data.html);
+                            $('#subscribe_form').addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                                $('#subscribe_form').hide().removeClass('animated zoomOut');
+                                $('#subscribe_results').show().addClass('animated fadeIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                                    $('#subscribe_results').removeClass('animated fadeIn');
+                                });
+                            });
+                        },
+                        error: function(xhr) {
+                            if(xhr.responseJSON.errors != undefined) {
+                                $.each(xhr.responseJSON.errors, function(index, err) {
+                                    var item = $('input[name="' + err.name + '"]', document).parents('.grid-col');
+                                    APP.formError(item, err);
+                                });
+                            }
+                            if(xhr.responseJSON.token != undefined) {
+                                APP.token.val(xhr.responseJSON.token);
+                            }
+                        },
+                        complete: function() {
+                            APP.Hud.hide();
+                            button.prop('disabled', false); 
+                        }
+                    });
+                });
+            });
+        }
+    },
+
+    kontakt: function(url) {
+        if(this.url[2] !== undefined) {
+            $('.map-static').click(function(event) {
+                APP.Maps.init($(this)); 
+            });
+        }
+    },
+
+    presse: function(url) {
+        
+        APP.Graphs.init(this.url);
+        APP.StickyDiv.reverse();  
+        
+        // fullscreen
+        $('.list[data-list="press_images"] .list-item').click(function(event) {
+            var gallery = $(this).data("gallery");
+            $.get('/presse/images/' + gallery, function(data) {
+                var title = $(data).data('title');
+                var mlink = [];
+                var link = $('<a />');
+                    link.attr({'data-action':'download', 'data-gallery':gallery});
+                    link.text('Last ned bildearkiv');
+                    mlink.push(link);
+
+                var container = APP.Modal.init(title, data, mlink);
+
+                initSwiper(container.find('.swiper-container'));
+
+                function initSwiper(target, idx) {
+                    idx = (idx!=undefined) ? (idx - 1) : 0;
+                    return new Swiper(target,{
+                        mode:'horizontal',
+                        initialSlide: idx,
+                        loop: true,
+                        grabCursor: true,
+                        keyboardControl: true,
+                        calculateHeight:true,
+                        pagination: $(target).find('.pagination')[0],
+                        createPagination: true,
+                        paginationClickable: true,
+                        nextButton: $(target).find('.swiper-button-next')[0],
+                        prevButton: $(target).find('.swiper-button-prev')[0]
+                    });
+                }
+            });
+        });
+
+        // download zip from overlay
+        $(document).on('click', '.mobile-modal-overlay .link-container a', function(event) {
+            event.preventDefault();
+            if($(this).data('action') == "download") {
+                $.get('/presse/zip/' + $(this).data('gallery'), function(url) {
+                    window.open(url);
+                });
+            }
+        });
+    },
+
+    prisstatistikk: function(url) {
+        APP.Graphs.init(this.url);
+    },
+
+    newsletterUnsubscribe: function() {
+        $('button[data-action="unsubscribe"]').click(function(event) {
+            var button = $(this);
+                button.prop('disabled', true); 
+            $.ajax({
+                xhr: function() {
+                    var xhr = $.ajaxSettings.xhr();
+                    xhr.upload.onprogress = function(e) {
+                        console.log(Math.floor(e.loaded / e.total *100) + '%');
+                    };
+                    return xhr;
+                },
+                url: '/api/v1/put/unsubscribe-newsletter',
+                type: 'post',
+                dataType: 'json',
+                data: {
+                    token: APP.token.val(),
+                    key: APP.url[2],
+                    unsubscribe_email: $('input[name="unsubscribe_email"]').val()
+                },
+                success: function(data) {
+                    $('body').animate({scrollTop : 0},250);
+                    APP.token.val(data.token);
+                    $('#unsubscribe_results').html(data.html);
+                    $('#unsubscribe_form').addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                        $('#unsubscribe_form').hide().removeClass('animated zoomOut');
+                        $('#unsubscribe_results').show().addClass('animated fadeIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(e) {
+                            $('#unsubscribe_results').removeClass('animated fadeIn');
+                        });
+                    });
+                },
+                error: function(xhr) {
+                    if(xhr.responseJSON.errors != undefined) {
+                        $.each(xhr.responseJSON.errors, function(index, err) {
+                            var item = $('input[name="' + err.name + '"]', document).parents('.grid-col');
+                            APP.formError(item, err);
+                        });
+                    }
+                    if(xhr.responseJSON.token != undefined) {
+                        APP.token.val(xhr.responseJSON.token);
+                    }
+                },
+                complete: function() {
+                    APP.Hud.hide();
+                    button.prop('disabled', false); 
+                }
+            });
+            
+        });
+    }
+
+};
+
+
+APP.MobileHeader = {
+    init: function() {
+        this.search();
+        $('.hamburger-menu-button[data-button="nav-toggle"]').click(function(event) {
+            if($('header.header-mobile').hasClass('open')) {
+                APP.MobileHeader.navClose();
+            } else {
+                APP.MobileHeader.navOpen();
+            }
+        });
+        $('.hamburger-menu-button[data-button="search-close"]').click(function(event) {
+            APP.MobileHeader.searchClose();
+        });
+        $(document).on('keyup', function(event) {
+            if(event.keyCode == 27)
+            {
+                APP.MobileHeader.searchClose();
+                APP.MobileHeader.navClose();
+            }
+        });
+
+        $('.mobile-search-button').click(function(event) {
+            APP.MobileHeader.navClose();
+            if($('.mobile-search-button').hasClass('open'))
+                APP.MobileHeader.searchClose();
+            else
+                APP.MobileHeader.searchOpen();
+        });
+    },
+    search: function() {
+        $('form.mobile-search-form').on('submit', function(event) {
+            event.preventDefault();
+        });
+
+        $(document).on('mouseover', '.mobile-search-overlay .list a.list-item', function(event) {
+            removeActive();
+            $(this).addClass('active');
+            $('#main-search').blur();
+        }).on('mouseout', '.mobile-search-overlay .list a.list-item', function(event) {
+            removeActive();
+            $('#main-search').focus();
+        });
+
+        $(document).on('click', '.mobile-search-overlay .list a.list-item', function(event) {
+            if ($(this).data('keyword')) {
+                event.preventDefault();
+                $('#main-search').val($(this).data('keyword'));
+                startSearch();
+            }
+        });
+
+        // navigate search-results
+
+        $(document).keyup(function(event) {
+            
+            if($('.mobile-search-overlay').is(':visible')) {
+                var active = activeItem();
+                var items = $('.mobile-search-overlay .list:visible a.list-item, .mobile-search-overlay .list:visible a.rent-item');
+                
+                if (event.keyCode == 38) { // up
+                    if(items[0]) { 
+                        event.preventDefault();                       
+                        $('#main-search').blur();
+                        if(active != undefined && active[0]) {
+                            removeActive();
+                            active.prev().addClass('active');
+                        } else {
+                            active = items.last();
+                            active.addClass('active');
+                        }
+                    }
+                }
+                else
+                if (event.keyCode == 40) { // down
+                    if(items[0]) {
+                        event.preventDefault();     
+                        $('#main-search').blur();                 
+                        if(active != undefined && active[0]) {
+                            removeActive();
+                            active.next().addClass('active');
+                        } else {
+                            active = items.first();
+                            active.addClass('active');
+                        }
+                    }
+                }
+                else
+                if(event.keyCode == 13 && active != undefined && active[0]) {
+                    console.log('enter...');
+                    console.log(active);
+                    event.preventDefault();
+                    if (active.attr('href')) {
+                        window.location = active.attr('href');
+                    }
+                    else
+                    if (active.data('keyword')) {
+                        $('#main-search').val(active.data('keyword'));
+                        startSearch();
+                    }
+                }
+            }
+        });
+        
+        function activeItem() {
+            var items = $('.mobile-search-overlay .list:visible a.list-item');
+            for (var i = items.length - 1; i >= 0; i--) {
+                if($(items[i]).hasClass('active')) {
+                    return $(items[i]);
+                    break;
+                }
+            }
+        }
+
+        function removeActive() {
+            var items = $('.mobile-search-overlay .list:visible a.list-item');
+            items.removeClass('active');
+        }
+
+        $('#main-search').keyup(function(event) {
+            var keyword = $(this);
+            var overlay = $('.mobile-search-overlay');
+            var results = overlay.find('.search-results');
+            var ignore  = [38,40];
+            
+            if(ignore.indexOf(event.keyCode) < 0)
+            {
+                if(keyword.val().length > 0) {
+                    overlay.removeClass('start loading').addClass('typing');
+                    removeActive();
+                } else {
+                    console.log('else - start');
+                    overlay.removeClass('typing loading').addClass('start');
+                    removeActive();
+                }
+            }
+
+            if (event.keyCode == 13 && keyword.val().length > 0 && !activeItem())
+            {
+                event.preventDefault();
+                startSearch();
+            }
+            else if(keyword.val().length == 0)
+            {
+                results.hide();
+                overlay.removeClass('loading').addClass('start');
+            }
+            
+        });
+
+        function startSearch() {
+            var keyword = $('#main-search');
+            var overlay = $('.mobile-search-overlay');
+            var results = overlay.find('.search-results');
+            overlay.removeClass('start typing').addClass('loading');
+            keyword.blur();
+            $.ajax({
+                url: '/api/search/',
+                type: 'post',
+                dataType: 'html',
+                data: {keyword: keyword.val()},
+                success: function(data) {
+                    results.find('.list').html(data);
+                    results.show().animateCss('fadeInDown');
+                },
+                error: function(xhr) {
+                    console.error(xhr);
+                },
+                complete: function(xhr) {
+                    overlay.removeClass('loading');
+                    keyword.focus();
+                }
+            });
+        }
+    },
+    searchOpen: function() {
+        $('.mobile-search-button').addClass('open');
+        $('.mobile-text-logo').addClass('hidden');
+        $('.hamburger-menu-button[data-button="nav-toggle"]').addClass('hidden');
+        $('.mobile-search-overlay').addClass('start open');
+        $('body').addClass('overlay');
+        $('#main-search').val('');
+    },
+    searchClose: function() {
+        $('.mobile-search-button').removeClass('open');
+        $('.mobile-text-logo').removeClass('hidden');
+        $('.hamburger-menu-button[data-button="nav-toggle"]').removeClass('hidden');
+        $('.mobile-search-overlay').removeClass('open');
+        $('.mobile-search-overlay .list:visible a.list-item').removeClass('active');
+        $('body').removeClass('overlay');
+        $('#main-search').val('');
+    },
+
+    navOpen: function() {
+        $('.hamburger-menu-button[data-button="nav-toggle"]').addClass('open');
+        $('header.header-mobile').addClass('open');
+        $('.mobile-text-logo').addClass('open');
+        $('.mobile-search-button').addClass('open');
+        $('.mobile-menu-overlay').addClass('open');
+        $('.mobile-menu-overlay .mobile-submenu a').animateCss('slideInRight');
+        $('body').addClass('overlay');
+    },
+    navClose: function() {
+        $('.hamburger-menu-button[data-button="nav-toggle"]').removeClass('open');
+        $('header.header-mobile').removeClass('open');
+        $('.mobile-text-logo').removeClass('open');
+        $('.mobile-search-button').removeClass('open');
+        $('.mobile-menu-overlay').removeClass('open');
+        $('body').removeClass('overlay');
+    }
+
+};
+
+APP.StickyDiv = {
+
+    dtop:   0,
+    divtop: 0,
+    dbottom:0,
+    dwidth: 0,
+    dheight:0,
+    pholder:undefined,
+    dclone: undefined,
+    sticky: undefined,
+    active: undefined,
+
+    /**
+     * Clone div and keep it when scrolling, leave the actual div
+     * on page and make it invicible (see APP.StickyDiv.reverse()).
+     */
+    init: function() {
+        var container = $('.sticky-container');
+        var div       = $('.sticky-div');
+
+        if(container[0] && div[0])
+        {
+            this.divtop  = (div.data("top")!==undefined) ? div.data("top") : 30;
+            this.dtop    = container.offset().top;
+            this.dleft   = div.offset().left;
+            this.dbottom = ((this.dtop + container.height()) - div.height());
+            this.dwidth  = div.width();
+            this.dheight = div.outerHeight() + 2;
+            this.dclone  = div.children(':not(.sticky-hide)').clone();
+            this.sticky  = $('#sticky-div-fixed').css({'width':this.dwidth, 'height':((div.data("height")=="auto") ? "auto" : this.dheight), 'left':this.dleft, 'top':this.divtop}).append(this.dclone);
+
+            $(window).scroll($.proxy(function(e) {
+                if($(window).height() > this.dheight)  // 736 this.dheight switch to height... (div container must be )
+                {
+                    var offset  = $(window).scrollTop();
+                    var closest = $('.sticky-content h2').closestToOffset({top : offset, left : 0});
+
+                    if (offset >=  parseInt(this.dtop) && offset < parseInt(this.dbottom - this.divtop) && !this.sticky.hasClass('fixed')) {
+                        //div.hide();
+                        div.css('opacity',0);
+                        this.sticky.css({'top':this.divtop}).removeClass('absolute').addClass('fixed');
+                    }
+                    else if(offset >= parseInt(this.dbottom - this.divtop) && !this.sticky.hasClass('absolute')) {
+                        this.sticky.css({'top':this.dbottom}).removeClass('fixed').addClass('absolute');
+                    }
+                    else if (offset < parseInt(this.dtop - this.divtop) && (this.sticky.hasClass('absolute') || this.sticky.hasClass('fixed'))) {
+                        this.sticky.removeClass('absolute fixed');
+                        div.css('opacity',1);
+                        div.show();
+                        if($('#rentalfavorites')[0] && $('#rentalfavorites').hasClass('open')) {
+                            $('#rentalfavorites').removeClass('open');
+                            $('a[data-action="toggleFavorites"]').removeClass('active');
+                        }
+                    }
+                    // highlight active link
+                    if(this.active != closest) {
+                        this.active = closest;
+                        this.sticky.find('.list-item').removeClass('item-active animated pulse');
+                        this.sticky.find('.list-item[data-link="' + closest.data('anchor') + '"]').addClass('item-active animated pulse')
+                    }
+                }
+            }, this));
+        }
+    },
+    /**
+     * Make div fixed when scrolling, and leave a placeholder
+     * with same height where div used to be.
+     */
+    reverse: function() {
+        var container = $('.sticky-container');
+        var div       = $('.sticky-div');
+        if(container[0] && div[0])
+        {
+            this.divtop  = (div.data("top")!==undefined) ? div.data("top") : 30;
+            this.dtop    = container.offset().top;
+            this.dleft   = div.offset().left;
+            this.dbottom = ((this.dtop + container.height()) - div.height());
+            this.dwidth  = div.width();
+            this.dheight = div.height();
+            this.dclone  = div.children(':not(.sticky-hide)').clone();
+            //this.sticky  = $('#sticky-div-fixed').css({'width':this.dwidth, 'height':((div.data("height")=="auto") ? "auto" : this.dheight), 'left':this.dleft, 'top':this.divtop}).append(this.dclone);
+            this.pholder = $('<div />').addClass('sticky-placeholder').css('height', this.dheight);
+            this.sticky  = container;
+
+            $(window).scroll($.proxy(function(e) {
+                if($(window).height() > this.dheight)  // 736 this.dheight switch to height... (div container must be )
+                {
+                    var offset  = $(window).scrollTop();
+                    var closest = $('.sticky-content h2').closestToOffset({top : offset, left : 0});
+
+                    // scrolling
+                    if (offset >=  parseInt(this.dtop) && offset < parseInt(this.dbottom - this.divtop)) {
+                        this.pholder.insertBefore(div);
+                        div.css({'top':this.divtop}).addClass('sticky-div-fixed');
+                    }
+                    // above container area
+                    else if (offset < parseInt(this.dtop - this.divtop)) {
+                        div.removeClass('sticky-div-fixed').css('top', this.pholder.offset().top);
+                        this.pholder.remove();
+                        if($('#rentalfavorites')[0] && $('#rentalfavorites').hasClass('open')) {
+                            $('#rentalfavorites').removeClass('open');
+                            $('a[data-action="toggleFavorites"]').removeClass('active');
+                        }
+                    }
+                    // highlight active link
+                    if(this.active != closest) {
+                        this.active = closest;
+                        this.sticky.find('.list-item').removeClass('item-active animated pulse');
+                        this.sticky.find('.list-item[data-link="' + closest.data('anchor') + '"]').addClass('item-active animated pulse')
+                    }
+                }
+/*
+                
+*/
+            }, this));
+
+            $(window).bind('resize', function(event, ui) {
+                // update the sticky with new widths...
+            });
+        }
+    }
+};
+
+
+APP.csSelect = {
+    placeholders: function() {
+        $('.cs-select').each(function(index, el) {
+            var ph = $(this).find('select option:selected').text();
+            $(this).find('.cs-placeholder').text(ph);
+        });
+    },
+    init: function(select) {
+        var options = $('<div />').addClass('cs-options');
+        var list = $('<ul />');
+        select.find('option').each(function(index, el) {
+            if(index > 0) {
+            var item = $('<li />').attr({
+                            'data-option':'',
+                            'data-value': el.value
+                        }).text($(el).text());
+            (($(el).prop('selected')))
+                ? item.addClass('active')
+                : undefined;
+            list.append(item);
+            }
+        });
+        options.append(list);
+        var container = APP.Modal.init(select.find('option:eq(0)').text(), options);
+
+        $(document).on('click', '.cs-options li', function(event) {
+            $('.cs-options li').removeClass('active');
+            $(this).addClass('active')
+            var target = '';
+            $('.cs-select select').val($(this).data('value')).trigger('change');
+            APP.Modal.hide(container);
+        });
+
+        $(document).on('change', '.cs-select select', function(event) {
+            var label = $(this).find('option:selected').text();
+            $(this).siblings('.cs-placeholder').text(label);
+        });
+    }
+};
+
+/**
+ * Google Maps module
+ * add data variables to the map-canvas
+ */
+APP.Maps = {
+    map: undefined,
+    mapType: undefined,
+    init: function (source, maptype) 
+    {
+        var canvas = $('<div />').addClass('map-canvas').attr('data-address', source.data('address'));
+        var container = APP.Modal.init(source.data('address'), canvas);
+
+        // map exists - change map type
+        if(APP.Maps.mapType != maptype && APP.Maps.map && container.find('.map-canvas')) {
+            APP.Maps.mapType = maptype;
+            APP.Maps.map.setMapTypeId(maptype);
+        }
+        // else (re-)set the map
+        else {
+            this.initMap(container.find('.map-canvas'));
+        }
+    },
+    initMap: function (canvas) 
+    {
+        // get dynamically?
+        var gm_key = "AIzaSyAuvdP2zvAGK2nWknlbamlGF1-PzQCr7GM";
+
+        $.getScript("//maps.googleapis.com/maps/api/js?key=" + gm_key).done(function( script, textStatus ) 
+        {
+            var type = (APP.Maps.mapType) ? APP.Maps.mapType : google.maps.MapTypeId.ROADMAP;
+            var zoom = (canvas.data('zoom')) ? parseInt(canvas.data('zoom')) : 14;
+             
+            var mapOptions = {
+                zoom: zoom,
+                scrollwheel: true,
+                navigationControl: true,
+                mapTypeControl: true,
+                scaleControl: true,
+                draggable: true,
+                zoomControl: true,
+                streetViewControl: true,
+                mapTypeId: type //google.maps.MapTypeId.ROADMAP
+            };
+
+            APP.Maps.map = new google.maps.Map(canvas[0],
+                mapOptions);
+
+            var image = new google.maps.MarkerImage(
+               '/assets/icons/map_marker.png',
+               new google.maps.Size(40,46),
+               new google.maps.Point(0,0),
+               new google.maps.Point(25,46)
+            );
+
+            var geocoder = new google.maps.Geocoder();
+            var address = decodeURIComponent(canvas.data('address'));
+
+            geocoder.geocode(
+                { address: address },
+                $.proxy(function (results, status) {
+                    if (status == google.maps.GeocoderStatus.OK) {
+                        var loc = results[0].geometry.location;
+                        APP.Maps.map.setCenter(loc);
+                        var marker = new google.maps.Marker({
+                           map: APP.Maps.map,
+                           draggable: false,
+                           animation: google.maps.Animation.DROP,
+                           position: loc,
+                           icon: image
+                        });
+                        
+                        google.maps.event.addListener(marker, 'click', $.proxy(function(event) {
+                            //var cont = $('<div />').addClass('fancymap').attr('data-address', address).attr('style', 'width: 100%; height: 100%');
+                            console.log('clicked marker in map');
+                        }, this));
+                        
+                    } else {
+                        var msg = "";
+                        switch(status) {
+                            case "ZERO_RESULTS":
+                                msg = 'Google Maps klarte ikke Ã¥ finne adressen "' + address + '"';
+                                break;
+                            default:
+                                msg = 'Geocode was not successful for the following reason: ' + status;
+                                break;
+                        }
+                        APP.Dialog.alert('Feil i Google Maps', msg);
+                    }
+                }, this)
+           );
+      });
+    }
+};
+
+/**
+ * Custom Dialog box for Utleiemegleren.
+ * Supports Alert and Confirm (with callback)
+ *  use: APP.Dialog.alert('title', 'message');
+ *   or: APP.Dialog.confirm('title', 'message', [{label:"OK", action:"true", color:"red|green|blue"}, {label:"Cancel", action:"false", color:"red|green|blue"}]).then(function(answer) { if(answer=="something") { // do something // }});
+ */
+APP.Dialog = {
+    show: function(type, title, body, buttons) {
+
+        APP.Dialog.listen();
+
+        if(!$(document).find('.um-dialog')[0]) 
+        {
+        
+            var defer = $.Deferred();
+            var dialog      = $('<div class="um-dialog ' + type + '"></div>'),
+                content     = $('<div class="um-dialog-container"></div>'),
+                buttonpane  = $('<div class="um-dialog-buttonpane"></div>');
+                content.append('<div class="um-dialog-titlebar">' + title + '</div>');
+                (body) ? content.append('<div class="um-dialog-content">' + body + '</div>') : null;
+
+            if(buttons == undefined) 
+            {
+                var button = $('<div class="um-dialog-button single-button" id="um-button0" data-action="true">OK</div>')
+                            .click(function(resolvePromise) {
+                                defer.resolve($(this).data("action"));
+                                APP.Dialog.hide();
+                        });
+                        buttonpane.prepend(button);
+            }
+            else
+            {
+                var buttonClass = (buttons.length > 2) ? 'list-button' : '';
+                for (var i = buttons.length - 1; i >= 0; i--) {
+                    
+                    var action = buttons[i].action.toString();
+                    var color  = (buttons[i].color != undefined) ? buttons[i].color : '';
+                        window["button"+i] = $('<div class="um-dialog-button ' + buttonClass + ' ' + color + '" id="um-button'+i+'" data-action="'+action+'" onclick="">' + buttons[i].label + '</div>')
+                            .click(function(resolvePromise) {
+                                defer.resolve($(this).data("action"));
+                                APP.Dialog.hide();
+                        });
+                        buttonpane.prepend(window["button"+i]);
+                };
+            }
+            content.append(buttonpane);
+            dialog.append(content);
+            $('body').prepend(dialog);
+            
+            var overlay = $('<div />').addClass('um-overlay');
+            $('body').prepend(overlay);
+            
+            dialog.show().addClass('animated zoomIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+                dialog.removeClass('animated zoomIn');
+                overlay.addClass('visible');
+                $('body').addClass('overlay');
+            });
+
+            return defer.promise();
+        }
+        return;
+    },
+    alert: function(title, body) {
+        return this.show('alert', title, body);
+    },
+    confirm: function(title, body, buttons) {
+        return this.show('info', title, body, buttons);
+    },
+    hide: function() {
+        $('.um-overlay').removeClass('visible');
+        $('.um-dialog').addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+            $('.um-dialog').remove();
+            $('.um-overlay').remove();
+            $('body').removeClass('overlay');
+        });
+    },
+    listen: function() {
+        $(document).on('keydown', function(e) {
+            if(e.keyCode == 27) {
+                APP.Dialog.hide();
+            }
+        });
+    }
+};
+
+/**
+     * A hud can be used to inform the user than a query is sent or
+     * if a script is loading, done or failed. You can also attach progress
+     * when using jquery.form.js - this is handy...
+     * 
+     * APP.Hud.show('message', 'load'); // to call hud
+     * APP.Hud.hide(); // to hide a loading hud
+     *
+     */
+APP.Hud = {
+    show: function(labeltext, symbol, hideBg) {
+        
+        APP.Hud.hide();
+
+
+        var  bg = (hideBg) ? 'transparent' : '',
+            hud = $('<div class="hud ' + bg + '"></div>'),
+            con = $('<div class="hud-content"></div>');
+
+        switch (symbol) {
+            case "load" :
+                //con.append('<img src="/assets/icons/spinner.svg">');  // check browser support?
+                con.append('<?xml version="1.0" encoding="utf-8"?><svg width="50px" height="50px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid" class="uil-ring"><rect x="0" y="0" width="100" height="100" fill="none" class="bk"></rect><defs><filter id="uil-ring-shadow" x="-100%" y="-100%" width="300%" height="300%"><feOffset result="offOut" in="SourceGraphic" dx="0" dy="0"></feOffset><feGaussianBlur result="blurOut" in="offOut" stdDeviation="0"></feGaussianBlur><feBlend in="SourceGraphic" in2="blurOut" mode="normal"></feBlend></filter></defs><path d="M10,50c0,0,0,0.5,0.1,1.4c0,0.5,0.1,1,0.2,1.7c0,0.3,0.1,0.7,0.1,1.1c0.1,0.4,0.1,0.8,0.2,1.2c0.2,0.8,0.3,1.8,0.5,2.8 c0.3,1,0.6,2.1,0.9,3.2c0.3,1.1,0.9,2.3,1.4,3.5c0.5,1.2,1.2,2.4,1.8,3.7c0.3,0.6,0.8,1.2,1.2,1.9c0.4,0.6,0.8,1.3,1.3,1.9 c1,1.2,1.9,2.6,3.1,3.7c2.2,2.5,5,4.7,7.9,6.7c3,2,6.5,3.4,10.1,4.6c3.6,1.1,7.5,1.5,11.2,1.6c4-0.1,7.7-0.6,11.3-1.6 c3.6-1.2,7-2.6,10-4.6c3-2,5.8-4.2,7.9-6.7c1.2-1.2,2.1-2.5,3.1-3.7c0.5-0.6,0.9-1.3,1.3-1.9c0.4-0.6,0.8-1.3,1.2-1.9 c0.6-1.3,1.3-2.5,1.8-3.7c0.5-1.2,1-2.4,1.4-3.5c0.3-1.1,0.6-2.2,0.9-3.2c0.2-1,0.4-1.9,0.5-2.8c0.1-0.4,0.1-0.8,0.2-1.2 c0-0.4,0.1-0.7,0.1-1.1c0.1-0.7,0.1-1.2,0.2-1.7C90,50.5,90,50,90,50s0,0.5,0,1.4c0,0.5,0,1,0,1.7c0,0.3,0,0.7,0,1.1 c0,0.4-0.1,0.8-0.1,1.2c-0.1,0.9-0.2,1.8-0.4,2.8c-0.2,1-0.5,2.1-0.7,3.3c-0.3,1.2-0.8,2.4-1.2,3.7c-0.2,0.7-0.5,1.3-0.8,1.9 c-0.3,0.7-0.6,1.3-0.9,2c-0.3,0.7-0.7,1.3-1.1,2c-0.4,0.7-0.7,1.4-1.2,2c-1,1.3-1.9,2.7-3.1,4c-2.2,2.7-5,5-8.1,7.1 c-0.8,0.5-1.6,1-2.4,1.5c-0.8,0.5-1.7,0.9-2.6,1.3L66,87.7l-1.4,0.5c-0.9,0.3-1.8,0.7-2.8,1c-3.8,1.1-7.9,1.7-11.8,1.8L47,90.8 c-1,0-2-0.2-3-0.3l-1.5-0.2l-0.7-0.1L41.1,90c-1-0.3-1.9-0.5-2.9-0.7c-0.9-0.3-1.9-0.7-2.8-1L34,87.7l-1.3-0.6 c-0.9-0.4-1.8-0.8-2.6-1.3c-0.8-0.5-1.6-1-2.4-1.5c-3.1-2.1-5.9-4.5-8.1-7.1c-1.2-1.2-2.1-2.7-3.1-4c-0.5-0.6-0.8-1.4-1.2-2 c-0.4-0.7-0.8-1.3-1.1-2c-0.3-0.7-0.6-1.3-0.9-2c-0.3-0.7-0.6-1.3-0.8-1.9c-0.4-1.3-0.9-2.5-1.2-3.7c-0.3-1.2-0.5-2.3-0.7-3.3 c-0.2-1-0.3-2-0.4-2.8c-0.1-0.4-0.1-0.8-0.1-1.2c0-0.4,0-0.7,0-1.1c0-0.7,0-1.2,0-1.7C10,50.5,10,50,10,50z" fill="#e5eff3" filter="url(#uil-ring-shadow)"><animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" repeatCount="indefinite" dur="1s"></animateTransform></path></svg>');
+                break;
+            case "done" :
+            case 200 :
+                con.append('<i class="ion-checkmark-circled"></i>');
+                break;
+            case "fail" :
+            case 403 :
+            case 500 :
+                con.append('<i class="ion-close-circled"></i>');
+                break;
+            case "progress":
+                con.append('<div class="hud-progress-bar"><div class="hud-progress"></div></div>');
+        }
+
+        (symbol == "progress") ? con.prepend('<p>' + labeltext + '</p>') : con.append('<p>' + labeltext + '</p>');;
+
+        hud.append(con);
+        $('body').prepend(hud);
+        $('.hud').addClass("visible");
+        $('body').addClass('overlay');
+        
+        if(symbol != "load" && symbol != "progress") 
+        {
+            var timer = setTimeout(function() { 
+                APP.Hud.hide(); 
+            },3000); 
+        }
+        
+
+    },
+    hide: function() {
+        if($('.hud')[0]) {
+           $('.hud').removeClass("visible");
+           $('.hud').remove();
+           $('body').removeClass('overlay');
+        }
+    }
+};
+
+/**
+ * Modal (fullscreen popup)
+ * Build body content in seperate methods, before calling APP.Modal
+ * @param string modaltitle
+ * @param jq-obj modalbody
+ */
+APP.Modal = {
+    init: function(modaltitle, modalbody, modallinks, wait, size) {
+        if(container = this.check(modaltitle))
+        {
+            if(wait !== undefined) {
+                this.showAndWait(container, function(containr) {
+                    return containr;
+                });
+            } else {
+                this.show(container);
+                return container;
+            }
+        }
+        else {
+            var container = $('<div />').addClass('mobile-modal-overlay');
+                container.attr('data-title', modaltitle);
+                (size !== undefined) ? container.addClass('modal-popover') : '';
+
+            var content = $('<div />').addClass('modal-content');
+
+            var closeBtn = $('<div />').addClass('hamburger-menu-button open color-blue').attr('data-button', 'modal-close').html('<span></span><span></span><span></span>');
+            var title = $('<div />').addClass('title-container');
+                title.append($('<p />').addClass('ellipsify').text(modaltitle));
+            var link = $('<div />').addClass('link-container');
+                
+            if((typeof modallinks) == "object") {
+                $.each(modallinks, function(index, el) {
+                     link.append($(el));
+                });
+            }
+            
+            content.append(closeBtn);
+            content.append(title);
+            content.append(link);
+            content.append(modalbody);
+            container.append(content);
+            $('body').addClass('overlay').append(container);
+            
+            this.show(container);
+            this.listen(container);
+            return container;
+        }
+    },
+    show: function(container) {
+        container.show().animateCss('zoomIn');
+    },
+    showAndWait: function(container, callback) {
+        container.show().addClass("animated zoomIn").one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+            container.removeClass('animated zoomIn');
+            callback(container);
+            return false;
+        });
+    },
+    listen: function(container) {
+        container.find('.hamburger-menu-button[data-button="modal-close"]').click(function(event) {
+            APP.Modal.hide(container);
+        });
+        $(document).keyup(function(event) {
+            if(event.keyCode == 27) {
+                APP.Modal.hide(container);     
+            }
+        });
+    },
+    hide: function(container) {
+        container.addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+            container.removeClass('animated zoomOut');
+            container.hide();
+            $('body').removeClass('overlay');
+        });
+    },
+    check: function(modaltitle) {
+        if($('.mobile-modal-overlay[data-title="' + modaltitle + '"]')[0]) {
+            var container = $('.mobile-modal-overlay[data-title="' + modaltitle + '"]');
+            return container;
+        }
+    },
+    destroy: function(container) {
+        container.remove();
+        $('body').removeClass('overlay');
+    }
+};
+
+
+
+APP.Share = {
+
+    modal: function() {
+
+        var modaltitle = "Del siden";
+        var container = APP.Modal.check(modaltitle);
+        if(container) {
+            APP.Modal.show(container);
+        }
+        else 
+        {
+            var body = $('<div />').addClass('share-options');
+            $.get('/share/options', function(data) {
+                body.append(data);
+            
+                container = APP.Modal.init(modaltitle, body);
+                var t = setTimeout(function() {
+                $('.share-options').show();
+                    $('.share-options a').animateCss('bounceInUp');
+                },100);
+
+                // open social-links in popout window
+                /*var sharewindow;
+                $(document).on('click', 'a[data-target="sharewindow"]', function(event) {          
+                    event.preventDefault();
+                    var url = $(this).attr('href');
+                    var http = (url.indexOf('http') > -1) ? '' : 'http://';
+                    var path = window.location.pathname;
+                    if(sharewindow && !sharewindow.closed) 
+                    {
+                        sharewindow.location = http + url + path;
+                        sharewindow.focus();
+                    }
+                    else {
+                        window.open(http + url + path , "social", "toolbar=no, location=no, scrollbars=yes, resizable=yes, top=0, left=0, width=566, height=480");
+                    }
+                    APP.Modal.hide(container);
+                });
+                */
+                // open email share form
+                $(document).on('click', '.mobile-modal-overlay .share-options a', function(event) {
+                    APP.Modal.destroy(container);
+                });
+            });
+        }
+    },
+    sharewindow: function(obj) {
+        var sharewindow;
+        var url = obj.attr('href');
+        var http = (url.indexOf('http') > -1) ? '' : 'https://';
+        var path = window.location.pathname;
+        console.log(http + url);
+        if(sharewindow && !sharewindow.closed) 
+        {
+            sharewindow.location = http + url;
+            sharewindow.focus();
+        }
+        else {
+            window.open(http + url , "social", "toolbar=no, location=no, scrollbars=yes, resizable=yes, top=0, left=0, width=566, height=480");
+        }
+        //APP.Modal.hide(container);
+    },
+
+    emailform: function(button) {
+        var shtitle = "Del pÃ¥ e-post";
+        var ogtitle = $('head meta[property="og:title"]').attr('content');
+        var ogimage = $('head meta[property="og:image"]').attr('content');
+        var ogdesc  = $('head meta[property="og:description"]').attr('content');
+        var ogurl   = $('head meta[property="og:url"]').attr('content');
+        var body    = $('<div />').addClass('email-form');
+        var buttonId= new Date().getTime();
+        var links   = [$('<a />').attr('id', 'sendShareForm_'+buttonId).text("Send")];
+        console.log(ogurl);
+        $.get('/share/email/', {ogtitle:ogtitle, ogimage:ogimage, ogdesc:ogdesc, ogurl:ogurl}, function(data) {
+            body.append(data);
+            //APP.Modal.destroy(container);
+            var container = APP.Modal.init(shtitle, body, links);
+            //autosize($('textarea'));
+
+            // submit email share form
+            var form = $('.mobile-modal-overlay[data-title="' + shtitle + '"]');
+
+            $(document).on('click', '#sendShareForm_'+buttonId, function(event) {
+                //var button = $(this);
+                button.prop('disabled', true); 
+                APP.Hud.show('Sender', 'load',true); // addClass('button-progress');
+                $.ajax({
+                    url: '/api/v1/put/xxy/',
+                    type: 'post',
+                    dataType: 'json',
+                    data: {
+                        share_email: form.find('input[name="share_email"]').val(), 
+                        share_message: form.find('textarea[name="share_message"]').val(), 
+                        share_url: ogurl, 
+                        share_title: ogtitle, 
+                        share_image: ogimage, 
+                        share_description: ogdesc, 
+                        token: APP.token.val()
+                    },
+                    success: function(output) {
+                        APP.token.val(output.token);
+                        APP.Dialog.confirm(output.header, output.message, [{label:"OK", action:true}])
+                         .then(function(answer) { 
+                            if(answer) { 
+                                if(container) 
+                                {
+                                    $(document).off('click', '#sendShareForm_'+buttonId);
+                                    APP.Modal.destroy(container);
+                                }
+                                
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        if(xhr.responseJSON.errors != undefined) {
+                        $.each(xhr.responseJSON.errors, function(index, err) {
+                            var item = $('[name="' + err.name + '"]', document).parents('.item-input');
+                            APP.formError(item, err, 'flash');
+                        });
+                        }
+                        if(xhr.responseJSON.token != undefined) {
+                            APP.token.val(xhr.responseJSON.token);
+                        }
+                    },
+                    complete: function() {
+                        APP.Hud.hide();
+                        button.prop('disabled', false); 
+                    }
+                });
+            });
+        });
+    }
+};
+
+/**
+ * Graphs (jqPlot.com)
+ *
+ */
+APP.Graphs = {
+    
+    plots: [],
+
+    init: function(url) {
+        if($('.charts-container')[0] && $('.charts-container .charts-wrapper')[0]) {
+            var city  = $('.charts-container').data('city');
+            var years = $('.charts-container').data('years');
+            var rooms = $('.charts-container').data('rooms');
+            APP.Graphs.get($('.charts-container .charts-wrapper'), city, years, rooms);
+        }
+    },
+
+    get: function(target, city, years, rooms) {
+        rooms = (rooms != undefined) ? rooms : '';
+        $.ajax({
+            url: '/api/v1/get/zzx/' + city + '/' + years + '/' + rooms,
+            dataType: 'json',
+            success: function(data) {
+                APP.Graphs.plot(target, data);
+                APP.Graphs.listener();
+                return;
+            },
+            error: function(xhr) {
+                console.error(xhr);
+            }
+        });
+    },
+
+    listener: function() {
+        $(document).on('click', 'a[data-button="chartToImage"]', function(event) {
+            event.preventDefault();
+            APP.Graphs.toImage($(this));
+        });
+
+        $(document).on('click', 'a[data-button="chartToModal"]', function(event) {
+            event.preventDefault();
+            APP.Graphs.modal($('#' + $(this).data('chart')));
+        });
+        
+        $(window).bind('resize', function(event, ui) {
+            if(APP.Graphs.plots) {
+                $.each(APP.Graphs.plots, function(index, el) {
+                    el.replot();
+                });
+            }
+        });
+        
+    },
+
+    modal: function(chart) {
+        var modaltitle = chart.data('rooms') + ' ' + chart.data('city');
+        var buttonId= new Date().getTime();
+        var links   = [$('<a />').attr('id', 'graphToImage_'+buttonId).text("Vis som bilde")];
+        
+        var body = $('<div />').addClass('charts-container').attr('id', 'chart_'+buttonId);
+            body.append($('<div />').addClass('charts-wrapper'));
+        var container = APP.Modal.init(modaltitle, body); //, links
+        
+            APP.Graphs.get($('#chart_'+buttonId+' .charts-wrapper'), chart.data('city'), chart.data('years'), chart.data('rooms'));
+    },
+
+    toImage: function(chart) {
+        APP.Hud.show('Behandler...','load');
+        var chartId = chart.data('chart');
+        var target = $('#' + chartId).parents('.chart-content');
+            target.addClass('large-chart');
+        var chart;
+        $.each(APP.Graphs.plots, function(index, el) {
+            if(el.targetId == "#"+chartId) {
+                chart = el;
+                return;
+            }
+        });
+        chart.replot();
+        var imgData = target.jqplotToImageStr({}); // given the div id of your plot, get the img data
+        target.removeClass('large-chart');
+        chart.replot();
+        APP.Hud.hide();
+        window.location = imgData;
+    },
+
+    plot: function(target, data) {
+        $.jqplot.config.enablePlugins = true;
+         
+        // get city-count
+        var city_count = Object.keys(data.chartdata).length;
+        //var target = $('.charts-container .charts-wrapper');
+        
+        var g = 0;
+        var c = 0;
+        var i = 0;
+        var sumCharts = 0;
+        $.each(data.chartdata, function(i, arr) {
+            $.each(arr, function(room, yData) {
+                sumCharts +=1;
+            });
+        });
+        
+        // each city
+        $.each(data.chartdata, function(city, arr) {
+             
+             // each room (with yeardata)
+            $.each(arr, function(room, yData) {
+                
+                var chartdata = [];
+                var legend = $('<div />').addClass('chart-legend');
+                var y = 0;
+
+                // each year with monthdata
+                $.each(yData, function(year, mData) {
+                    chartdata.push(mData);
+                    var item = $('<div />').addClass('legend-item');
+                        item.css({
+                             'border-top-color': data.options[y].color
+                            ,'border-top-style': data.options[y].linePattern
+                            //,'color': data.options[i].color
+                        });
+                        item.text(year);
+                    legend.append(item);
+                    y += 1;
+                });
+                //console.log(APP.msie);
+                var dataMin = 4000; // (APP.msie) ? 4000  : Math.floor(Math.min(...chartdata[i]) / 4000) * 4000;
+                var dataMax = 16000; //(APP.msie) ? 15000 : Math.ceil(Math.max(...chartdata[i]) / 4000) * 4000;
+
+                var timer = setTimeout(function() {
+
+                var chartWidth  = ($(window).width() > 568) ? (100 / sumCharts) : 100;
+
+                var chartId   = 'chart_' + new Date().getTime();
+
+                var container = $('<div />').addClass('chart-container').css('width', chartWidth + '%');
+                var content   = $('<div />').addClass('chart-content');
+                var title     = $('<div />').addClass('chart-title').text(room + ' ' + city);
+                var button    = $('<a />').addClass('chart-button').attr({'data-chart':chartId, 'data-button':'chartToModal'}).html('<i class="ion-ios-plus-empty"></i>');
+                var footer    = $('<div />').addClass('chart-footer');
+                    //footer.append($('<a />').addClass('float-right').attr({'data-chart':'graph'+city+room, 'data-button':'chartToImage'}).text('Last ned'));
+                    footer.append($('<div />').text("Kilde: Utleiemegleren"));
+                var graph = $('<div />').addClass('chart jqplot-target');
+                    graph.attr({'id':chartId,'data-city':city,'data-rooms':room, 'data-years':(y - 1)});
+                    content.append(title);
+                    content.append(button);
+                    content.append(graph);
+                    content.append(legend);
+                    content.append(footer);
+                    container.append(content);
+                    
+                    target.append(container).promise().then(function(){
+
+                        container.show().addClass('animated zoomIn').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function() {
+                            container.removeClass('animated zoomIn');
+                        
+                        //var plottimer = setTimeout(function() {
+                        APP.Graphs.plots.push($.jqplot(chartId, chartdata, {
+                                animate: true,
+                                animateReplot: true,
+                                cursor: {
+                                    show: true,
+                                    zoom: true,
+                                    looseZoom: false,
+                                    showTooltip: true
+                                },
+                                grid: {
+                                    shadow: false,
+                                    drawGridLines: false,
+                                    drawBorder:false,
+                                    background: '#ffffff',
+                                    borderColor: 'transparent',
+                                    borderWith: '1.0' // '1.0'
+                                },
+                                
+                                legend: {
+                                    show: false,
+                                    placement: 'outside',
+                                    labels: data.labels,
+                                    rowSpacing: '0'
+                                },
+                                series: data.options,
+                                axesDefaults: {
+                                    pad: 0.1,
+                                    min: 7000
+                                    //,labelRenderer: $.jqplot.CanvasAxisLabelRenderer
+                                },
+                                axes: {
+                                    // These options will set up the x axis like a category axis.
+                                    xaxis: {
+                                        renderer: $.jqplot.CategoryAxisRenderer,
+                                        ticks: data.ticks,
+                                        tickOptions:{
+                                            showGridline: false
+                                        },
+                                        rendererOptions: {
+                                            forceTickAt0: true,
+                                            forceTickAt100: true
+                                        }
+                                    },
+                                    yaxis: {
+                                        rendererOptions: {
+                                            forceTickAt0: true,
+                                            forceTickAt100: true
+                                        },
+                                        tickOptions:{
+                                            showGridline: true
+                                        },
+                                        //tickInterval : 1500,
+                                        min:dataMin, //7000, //
+                                        max:dataMax  //16000 //
+                                    }
+                                },
+                                highlighter: {
+                                    tooltipContentEditor: function (str, seriesIndex, pointIndex, e) {
+                                        var price = (e._plotData[seriesIndex][pointIndex][1]!=undefined) 
+                                                    ? APP.Graphs.addThousand(e._plotData[seriesIndex][pointIndex][1])
+                                                    : '';
+                                        return  APP.Graphs.replace_months(str) 
+                                                + ' ' 
+                                                + data.labels[seriesIndex] 
+                                                + ': '
+                                                + '<strong>kr. ' + price + '</strong>';
+                                    },
+
+                                    // other options just for completeness
+                                    show: true,
+                                    showTooltip: true,
+                                    tooltipFade: true,
+                                    sizeAdjust: 10,
+                                    formatString: '%s',
+                                    tooltipLocation: 'n',
+                                    useAxesFormatters: true,
+                                }
+                            }));
+                        });
+                    });
+
+                },100 + c);
+            i += 1;
+            c += 100;
+            g += 300;
+            });
+        });
+    },
+    
+    addThousand: function (nStr) {
+        nStr += '';
+        var x = nStr.split('.');
+        var x1 = x[0];
+        var x2 = x.length > 1 ? '.' + x[1] : '';
+        var rgx = /(\d+)(\d{3})/;
+        while (rgx.test(x1)) {
+            x1 = x1.replace(rgx, '$1' + ' ' + '$2');
+        }
+        return x1 + x2;
+    },
+    
+    replace_months: function (str) { 
+        var fi = new Array(10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+        var re = new Array("oktober", "november", "desember", "januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september");
+        for (var i = 0; i < fi.length; i++) {
+            if (this.months_map) {
+                str = str.replace(fi[i], re[this.months_map[i]]); 
+            } else {
+                str = str.replace(fi[i], re[i]); 
+            }
+        } 
+        return str; 
+    }
+};
+
+
+APP.ImageGallery = {
+    init: function(url) {
+        
+        // set up listeners
+
+        // click image, collect all images in DOM with gallery (=this)
+        $(document).on('click', 'img[data-gallery]', function() {
+            var gallery = $(this).data('gallery');
+            $.each('img[data-gallery="' + gallery + '"]', function(idx, el) {
+                 // build content for APP.Modal...
+            });
+        });
+
+        // click link to get image gallery from AJAX
+        $(document).on('click', 'a[data-gallery]', function() {
+            var gallery = $(this).data('gallery');
+            var body = "";
+            $.ajax({
+                url: '/api/gallery/' + gallery,
+                type: 'get',
+                success: function(data) {
+                    body = data;
+                },
+                error: function(xhr) {
+                    console.error(xhr);
+                },
+                complete: function() {
+                    APP.Modal.init(body)
+                }
+            });
+            
+        });
+
+
+        //<img src="" data-gallery="something">
+
+        //<a data-gallery="2"></a>
+    },
+
+};
+
+APP.RentalFavorite = {
+    init: function(url) {
+        $(document).on('click', '.button-favorite[data-type="rental"]', function(event) {
+            event.preventDefault();
+            if(!$(this).hasClass('active')) {
+                APP.RentalFavorite.post('put', $(this));
+            } else {
+                APP.RentalFavorite.destroy($(this));
+            }
+        });
+    },
+
+    animate: function(obj) {
+        // move heart to to top heart animate pulse on top heart
+        if($('.menu-item[data-action="toggleFavorites"]')[0] && obj[0])
+        {
+            var clone = obj.clone();
+            var dest  = $('.menu-item[data-action="toggleFavorites"]');
+            var top   = ($(window).scrollTop() > 65) ? 0 : dest.offset().top - $(window).scrollTop();
+            //console.log('top: ' + top);
+            //console.log('clone: ' + ((obj.offset().top - $(window).scrollTop()) - (obj.height() / 2)));
+            clone.css({'top': ((obj.offset().top - $(window).scrollTop()) - (obj.height() / 2)), 'left':(obj.offset().left)}).appendTo($('body')).addClass('moveToFavorites aniFont').animate({'top':top, 'left':(dest.offset().left)}, 400, function() {
+                dest.find('i').attr('class', dest.find('i').attr('class').replace("-outline", ""));
+                dest.addClass('hasContent aniFont').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(ev) {
+                    dest.removeClass('aniFont');
+                });
+                clone.addClass('animated zoomOut').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(ev) {
+                    clone.remove();
+                });
+            });
+        }
+    },
+
+    restore: function() {
+        // set top icon back to "normal"
+        if($('.menu-item[data-action="toggleFavorites"]')[0])
+        {
+            var dest  = $('.menu-item[data-action="toggleFavorites"]');
+                dest.removeClass('hasContent');
+                dest.find('i').attr('class', dest.find('i').attr('class') + "-outline");
+        }
+    },
+
+    refresh: function() {
+        $.get('/api/v1/get/fav', function(data) {
+            $('#rentalfavorites .objects').html(data);
+        });
+    },
+
+    post: function(method, obj) {
+        if(method && obj[0] && obj.data("id")) 
+        {
+            if (!navigator.cookieEnabled) {
+                APP.Dialog.alert('Informasjonskapsler', 'Du mÃ¥ skru pÃ¥ informasjonskapler (cookies) for Ã¥ benytte denne tjenesten.');
+                return false;
+            }
+            $.ajax({
+                url: '/api/v1/' + method + '/fav',
+                type: 'post',
+                dataType: 'json',
+                data: {id: obj.data("id"), token:APP.token.val()},
+                success: function(data) {
+                    //APP.token.val(data.token);
+                    if(data.count != undefined && data.count == 0) {
+                        APP.RentalFavorite.restore();
+                    }
+                    if(method == "put") {
+                        obj.addClass('active');
+                        obj.attr("readonly",true);
+                        APP.RentalFavorite.animate(obj);
+                        APP.RentalFavorite.refresh();
+                    } else {
+                        if(APP.url[2]=="favoritter") 
+                        {
+                            obj.parents('.rent-item').addClass('animated slideOutRight').one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(ev) {
+                                $(ev.target).closest('hr').remove();
+                                $(ev.target).remove();
+                            });
+                            if($('.list[data-list="favorites"] .rent-item').length == 0) {
+                                var empty = $('<div />').addClass('list-item').html('<em>Du har ingen lagrede boligannonser.</em>');
+                                $('.list[data-list="favorites"]').append(empty);
+                            }
+                        } else {
+                        obj.removeClass('active');
+                        obj.attr('readonly',false);
+                        APP.RentalFavorite.refresh();
+                        }
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Try again!');
+                },
+                complete: function(xhr) {
+                    if(xhr.responseJSON.token !== undefined)
+                        APP.token.val(xhr.responseJSON.token);
+                }
+            });
+        }
+    },
+
+    destroy: function(obj) {
+        APP.Dialog.confirm('', 'Fjerne bolig fra dine favoritter?', [{label:"Fjern", action:true, color:'red'}, {label:"Avbryt", action:false}])
+         .then(function(answer) { 
+            if(answer) { 
+                APP.RentalFavorite.post('delete', obj);
+            }
+        });
+    }
+}
+
+
+/* --------------------- Entry point ---------------------------- */
+$($.proxy(APP.init, APP));
+
